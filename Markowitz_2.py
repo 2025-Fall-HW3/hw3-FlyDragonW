@@ -70,7 +70,48 @@ class MyPortfolio:
         """
         TODO: Complete Task 4 Below
         """
+        # === Strong Strategy: Top-3 Momentum + Risk Parity ===
+        # lookback 用 self.lookback，預設 50，但你可以改成 60 或 90
+
+        K = 3  # 只挑最強的 3 個 sector
         
+        eps = 1e-8
+
+        for current_date in self.price.index:
+
+            window_returns = self.returns.loc[:current_date, assets].tail(self.lookback)
+
+            # 如果天數還沒到 lookback，就跳過
+            if len(window_returns) < self.lookback:
+                continue
+
+            # === 1. Momentum: 過去 lookback 天累積報酬 ===
+            cumret = (1.0 + window_returns).prod() - 1.0
+
+            # 排序，挑出最強的 Top-K
+            topK = cumret.sort_values(ascending=False).head(K).index
+
+            # === 2. Top-K 裡做 inverse-vol risk parity ===
+            vol = window_returns[topK].std()
+            vol = vol.replace(0, np.nan)
+            inv_vol = 1.0 / vol
+            inv_vol = inv_vol.replace([np.inf, -np.inf], np.nan)
+
+            if inv_vol.isna().all():
+                # 特殊情況：均分
+                weights_topk = pd.Series(1.0 / K, index=topK)
+            else:
+                weights_topk = inv_vol / inv_vol.sum()
+
+            # === 3. 填寫今天的權重 ===
+            for col in self.price.columns:
+                if col == self.exclude:
+                    self.portfolio_weights.loc[current_date, col] = 0.0
+                elif col in topK:
+                    self.portfolio_weights.loc[current_date, col] = weights_topk[col]
+                else:
+                    self.portfolio_weights.loc[current_date, col] = 0.0
+
         
         """
         TODO: Complete Task 4 Above
